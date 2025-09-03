@@ -1,0 +1,173 @@
+
+
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+np.set_printoptions(precision=2,suppress=True)
+
+
+class imageprocessor():
+
+    def imagework(self):
+
+        imagePath="pedestrain.png"
+        image = cv2.imread(imagePath)
+        np_im=image.copy()
+
+        Location=[120,190]  # first component is vertical axis, second is horizontal axis
+        PatchSize=[128,64]  # first component is vertical axis, second is horizontal axis
+        numlinesY=int(PatchSize[0]/8)
+        numlinesX=int(PatchSize[1]/8)
+
+        #Draw frame around selected patch
+        plt.figure(figsize=(12,10))
+        cv2.rectangle(np_im, (Location[1], Location[0]),
+                              (Location[1]+PatchSize[1],Location[0]+PatchSize[0]),
+                             (0, 0, 255), 1)
+
+        #Draw region boundaries within the patch
+        for x in range(numlinesX):
+            cv2.line(np_im,(Location[1]+8*(x+1),Location[0]),
+                           (Location[1]+8*(x+1),Location[0]+PatchSize[0]),
+                           (0, 0, 255), 1)
+        for y in range(numlinesY):
+            cv2.line(np_im,(Location[1],Location[0]+8*(y+1)),
+                           (Location[1]+PatchSize[1],Location[0]+8*(y+1)),
+                           (0, 0, 255), 1)
+        plt.imshow(np_im)
+        plt.show()
+
+
+    def gradient(self,image):
+
+        np_im2=image.copy()
+        gx = cv2.Sobel(np_im2, cv2.CV_32F, 1, 0, ksize=1)
+        gy = cv2.Sobel(np_im2, cv2.CV_32F, 0, 1, ksize=1)
+
+        plt.figure(figsize=(12,10))
+        plt.imshow(gx,)
+        plt.show()
+
+
+    def magnitude(self,gx,gy):
+
+        mag, angle = cv2.cartToPolar(gx, gy, angleInDegrees=True)
+
+        mag=mag.astype(int)
+        angle=angle.astype(int)
+
+        plt.figure(figsize=(12,10))
+        plt.imshow(mag)
+        plt.show()
+
+
+    def maxoperator(self,mag):
+
+        maxChan=np.argmax(mag,axis=2)
+
+        maxmag=np.zeros(maxChan.shape)
+        for r in range(maxChan.shape[0]):
+            for c in range(maxChan.shape[1]):
+                maxmag[r,c]=mag[r,c,maxChan[r,c]]
+
+
+        plt.figure(figsize=(12,10))
+        plt.imshow(maxmag)
+        plt.show()
+
+class histogram:
+    def anglemapper(x):
+        if x >= 180:
+            return x - 180
+        else:
+            return x
+
+
+    def func(self,anglemapper,maxangle,Location,W):
+        vfunc = np.vectorize(anglemapper)
+        mappedAngles = (vfunc(maxangle))
+        print(mappedAngles[Location[0]:Location[0] + W, Location[1]:Location[1] + W])
+
+
+    def createHist(AngArray, MagArray, BS=20, BINS=9):
+        hist = np.zeros(BINS)
+        for r in range(AngArray.shape[0]):
+            for c in range(AngArray.shape[1]):
+                # print(AngArray[r,c])
+                binel, rem = np.divmod(AngArray[r, c], BS)
+                weightR = rem * 1.0 / BS
+                weightL = 1 - weightR
+                deltaR = MagArray[r, c] * weightR
+                deltaL = MagArray[r, c] * weightL
+                binL = int(binel)
+                binR = np.mod(binL + 1, BINS)
+                hist[binL] += deltaL
+                hist[binR] += deltaR
+        return hist
+
+    def spot(self,mappedAngles,Location,W,maxmag,createHist):
+        spotAngles = mappedAngles[Location[0]:Location[0] + W, Location[1]:Location[1] + W]
+        spotMag = maxmag[Location[0]:Location[0] + W, Location[1]:Location[1] + W]
+        spotHist = createHist(spotAngles, spotMag)
+        print('Gradient histogram of the selected region:')
+        print(spotHist)
+
+        plt.bar(range(9), spotHist)
+        plt.xticks(range(9), [0, 20, 40, 60, 80, 100, 120, 140, 160])
+        plt.title("Histogram of Gradients in selected patch")
+        plt.show()
+
+
+class normalization():
+
+    def patch(self,np_im,Location,PatchSize,W):
+
+        patch = np_im[Location[0]:Location[0] + PatchSize[0], Location[1]:Location[1] + PatchSize[1]].copy()
+        SR = 16
+        plt.figure(figsize=(14, 10))
+        cv2.rectangle(patch, (W, 0), (W + SR, SR), (255, 0, 0), 1)
+        cv2.rectangle(patch, (0, 0), (SR, SR), (0, 255, 0), 1)
+        plt.imshow(patch)
+        plt.show()
+
+    def hist(self,spotHist,mappedAngles,Location,W,maxmag,createHist):
+
+        hist11 = spotHist
+        spotAngles = mappedAngles[Location[0]:Location[0] + W, Location[1] + W:Location[1] + 2 * W]
+        spotMag = maxmag[Location[0]:Location[0] + W, Location[1] + W:Location[1] + 2 * W]
+        hist12 = createHist(spotAngles, spotMag)
+        spotAngles = mappedAngles[Location[0] + W:Location[0] + 2 * W, Location[1]:Location[1] + W]
+        spotMag = maxmag[Location[0] + W:Location[0] + 2 * W, Location[1]:Location[1] + W]
+        hist21 = createHist(spotAngles, spotMag)
+        spotAngles = mappedAngles[Location[0] + W:Location[0] + 2 * W, Location[1] + W:Location[1] + 2 * W]
+        spotMag = maxmag[Location[0] + W:Location[0] + 2 * W, Location[1] + W:Location[1] + 2 * W]
+        hist22 = createHist(spotAngles, spotMag)
+        histList = [hist11, hist12, hist21, hist22]
+        titles = ["Upper Left", "Upper Right", "Lower Left", "Lower Right"]
+        plt.figure(figsize=(14, 14))
+        i = 1
+        for h in histList:
+            plt.subplot(2, 2, i)
+            plt.title(titles[i - 1] + " Region")
+            plt.bar(range(9), h)
+            plt.xticks(range(9), [0, 20, 40, 60, 80, 100, 120, 140, 160])
+            plt.ylim((0, 2000))
+            i += 1
+            # plt.title("Histogram of Gradients in selected patch")
+        plt.show()
+
+    def region(self,histList):
+
+        histRegion=np.array([bin for hist in histList for bin in hist])
+        l2norm=np.sqrt(np.sum(histRegion**2))
+        epsilon=1e-6 # define epsilon in order to prevent division by zero
+        histRegionNormed=histRegion/(l2norm+epsilon)
+
+        plt.figure(figsize=(18,8))
+        plt.bar(range(9*4),histRegionNormed)
+        plt.xticks(range(9*4),[0,20,40,60,80,100,120,140,160]*4)
+        for d in range(3):
+            plt.plot([8.5+d*9,8.5+d*9],[0,0.5],"r--")
+        plt.title("Normalized Histogram of upper-left super-region (= 4 regions)")
+        plt.show()
+
