@@ -8,8 +8,6 @@ import cv2
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import train_test_split
 
-
-
 # Load image
 image = cv2.imread("image.jpg")
 image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
